@@ -1,0 +1,12 @@
+# LLM Model Configuration
+# Edit these values to change which models each agent uses
+
+models:
+  spec_interpreter: "openai/gpt-oss-safeguard-20b"
+  project_planner: "openai/gpt-oss-safeguard-20b"
+  code_generator: "openai/gpt-oss-safeguard-20b"
+  debugger: "openai/gpt-oss-safeguard-20b"
+
+# Build configuration
+build:
+  anchor_sbf_root: null
