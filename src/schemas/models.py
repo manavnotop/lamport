@@ -6,7 +6,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 # Constants
-MAX_RETRIES = 3
+MAX_RETRIES = 1
 
 
 class ContractFeature(str, Enum):
@@ -42,9 +42,9 @@ class GraphState(BaseModel):
     """State for the LangGraph workflow."""
 
     user_spec: str = Field(..., description="Original user specification")
+    project_name: str | None = Field(default=None, description="Project name for anchor init")
     on_event: Callable[[str], None] | None = Field(default=None)
     interpreted_spec: TokenSpec | None = Field(default=None)
-    project_name: str | None = Field(default=None)
     files: dict[str, str] = Field(default_factory=dict)
     validation_passed: bool = Field(default=False)
     validation_errors: list[str] = Field(default_factory=list)
@@ -79,3 +79,16 @@ class DebuggerPatch(BaseModel):
     path: str = Field(..., description="File path")
     content: str = Field(..., description="New file content")
     reason: str | None = Field(default=None, description="Why this patch is needed")
+
+
+class ProjectFile(BaseModel):
+    """A single file in the project."""
+
+    path: str = Field(..., description="Relative file path")
+    content: str = Field(..., description="File contents")
+
+
+class ProjectFiles(BaseModel):
+    """Structured output for file generation from LLM."""
+
+    files: list[ProjectFile] = Field(..., description="List of generated project files")

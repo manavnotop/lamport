@@ -1,9 +1,6 @@
 """Debugger Agent - analyzes errors and generates fixes using LangChain."""
 
-import json
-
 from src.agents.base import BaseAgent
-from src.schemas.models import DebuggerPatch
 
 SYSTEM_PROMPT = """You are an expert Solana smart contract debugger. Your job is to
 analyze build/validation errors and generate precise fixes.

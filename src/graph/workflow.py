@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +103,7 @@ def _safe_merge(state: GraphState, agent_result: dict[str, Any]) -> dict[str, An
     """
     control_fields = {
         "user_spec",
+        "project_name",
         "retry_count",
         "project_root",
         "current_step",
@@ -133,7 +133,8 @@ async def _run_agent_node(state: GraphState, agent_class: type, agent_name: str)
 
     logger.info(f"[{agent_name}] Starting...")
     try:
-        # Check if agent class accepts test_mode (only SpecInterpreter currently does explicitly in __init__)
+        # Check if agent class accepts test_mode
+        # (only SpecInterpreter currently does explicitly in __init__)
         if agent_name == "Spec Interpreter":
             agent = agent_class(test_mode=state.test_mode)
         else:
@@ -177,31 +178,42 @@ async def project_planner_node(state: GraphState) -> GraphState:
 
     logger.info("[Project Planner] Starting...")
     try:
+        # Get project name from state (provided by CLI)
+        project_name = state.project_name
+        if not project_name:
+            project_name = "my_contract"
+
+        # Create contracts directory
+        contracts_dir = Path.cwd() / "contracts"
+        contracts_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create project directory and run anchor init
+        project_root = contracts_dir / project_name
+        builder = Builder(contracts_dir)
+
+        logger.info(f"[Project Planner] Running anchor init {project_name}...")
+        success, output = builder.anchor_init(project_name)
+
+        if not success:
+            logger.warning(f"[Project Planner] anchor init failed: {output}")
+            # Continue anyway - maybe the directory already exists
+
+        # Now run the ProjectPlanner agent
         agent = ProjectPlanner()
         result_state = await agent.run(state.model_dump())
 
-        # Smart Naming: Append timestamp to project name
-        raw_name = result_state.get("project_name", "generated_project")
-        project_name = f"{raw_name}_{datetime.now().strftime('%Y%mk%d_%H%M%S')}"
-        project_root = Path.cwd() / "contracts" / project_name
-        project_root.mkdir(parents=True, exist_ok=True)
-
-        # Write files
+        # Write program files
         files = result_state.get("files", {})
-        file_ops = FileOps(project_root)
+        if files:
+            file_ops = FileOps(project_root)
 
-        # Clean up paths and write
-        clean_files = {}
-        for path, content in files.items():
-            parts = list(Path(path).parts)
-            while parts and parts[0] in [raw_name, "programs", "my-project", "program"]:
-                parts.pop(0)
-            clean_path = str(Path(*parts)) if parts else path
-            clean_files[clean_path] = content
-            if state.on_event:
-                state.on_event(f"file:write:{project_name}/{clean_path}")
+            for path, _content in files.items():
+                if state.on_event:
+                    state.on_event(f"file:write:{project_name}/{path}")
 
-        file_ops.write_files(clean_files)
+            file_ops.write_files(files)
+            logger.info(f"[Project Planner] Wrote {len(files)} program files")
+
         logger.info(f"[Project Planner] Completed: {project_name}")
 
         if state.on_event:
@@ -212,6 +224,7 @@ async def project_planner_node(state: GraphState) -> GraphState:
             **merged,
             user_spec=state.user_spec,
             retry_count=state.retry_count,
+            project_name=project_name,
             project_root=str(project_root),
             on_event=state.on_event,
             test_mode=state.test_mode,
@@ -222,7 +235,39 @@ async def project_planner_node(state: GraphState) -> GraphState:
 
 
 async def code_generator_node(state: GraphState) -> GraphState:
-    return await _run_agent_node(state, CodeGenerator, "Code Generator")
+    """Run code generator agent and write instruction files."""
+    if state.on_event:
+        state.on_event("agent:Code Generator:start")
+
+    logger.info("[Code Generator] Starting...")
+    try:
+        agent = CodeGenerator()
+        result_state = await agent.run(state.model_dump())
+
+        # Write generated instruction files to disk
+        files = result_state.get("files", {})
+        if files:
+            file_ops = FileOps(Path(state.project_root))
+            file_ops.write_files(files)
+            logger.info(f"[Code Generator] Wrote {len(files)} instruction files")
+
+        logger.info("[Code Generator] Completed successfully")
+
+        if state.on_event:
+            state.on_event("agent:Code Generator:end")
+
+        merged = _safe_merge(state, result_state)
+        return GraphState(
+            **merged,
+            user_spec=state.user_spec,
+            retry_count=state.retry_count,
+            project_root=state.project_root,
+            on_event=state.on_event,
+            test_mode=state.test_mode,
+        )
+    except Exception as e:
+        logger.error(f"[Code Generator] FAILED: {e}")
+        raise
 
 
 async def static_validator_node(state: GraphState) -> GraphState:
@@ -303,6 +348,7 @@ async def run_workflow(
     user_spec: str,
     on_event: Callable[[str], None] | None = None,
     test_mode: bool = False,
+    project_name: str | None = None,
 ) -> GraphState:
     """Run the complete workflow.
 
@@ -310,6 +356,7 @@ async def run_workflow(
         user_spec: Natural language specification
         on_event: Optional callback for progress events
         test_mode: If True, use mock LLM for testing
+        project_name: Project name for anchor init
 
     Returns:
         Final workflow state
@@ -319,6 +366,7 @@ async def run_workflow(
     logger.info("=" * 60)
     logger.info("WORKFLOW STARTED")
     logger.info(f"User specification: {user_spec[:100]}...")
+    logger.info(f"Project name: {project_name}")
     logger.info(f"Test mode: {test_mode}")
     logger.info("=" * 60)
 
@@ -327,6 +375,7 @@ async def run_workflow(
     initial_state = GraphState(
         user_spec=user_spec,
         test_mode=test_mode,
+        project_name=project_name,
         on_event=on_event,
     )
 

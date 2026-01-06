@@ -46,9 +46,15 @@ class MockLLM:
         for msg in messages:
             msg_content = msg.content if hasattr(msg, "content") else str(msg)
             if "TokenSpec" in msg_content or "Interpret this" in msg_content:
-                content = '{"name": "Mock Token", "symbol": "MCK", "decimals": 9, "features": ["mintable"]}'
-            elif "Anchor project structure" in msg_content:
-                content = '{"files": {"Anchor.toml": "[workspace]", "src/lib.rs": "// mock"}}'
+                content = (
+                    '{"name": "Mock Token", "symbol": "MCK", "decimals": 9, '
+                    '"features": ["mintable"]}'
+                )
+            elif "Anchor project" in msg_content or "contract code" in msg_content:
+                content = (
+                    '{"files": {"programs/my_token/src/lib.rs": "// mock", '
+                    '"tests/my_token.ts": "// test" }}'
+                )
 
         return AIMessage(content=content)
 

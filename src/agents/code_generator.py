@@ -1,14 +1,15 @@
 """Code Generator Agent - writes Rust instruction handlers using LangChain."""
 
-import json
-
-from src.agents.base import BaseAgent
-from src.schemas.models import TokenSpec
+from src.agents.base import LLMOnlyAgent
+from src.schemas.models import ProjectFiles
 
 SYSTEM_PROMPT = """You are an expert Solana smart contract Rust developer specializing in
-Anchor 0.30.x.
+Anchor 0.30.x. The Anchor project is already initialized. Your task is to write
+complete, production-ready Rust code for Solana programs.
 
-Your task is to write complete, production-ready Rust code for Solana programs.
+Output a JSON object with a "files" array. Each file has:
+- path: relative file path (e.g., "programs/project/src/lib.rs")
+- content: complete file contents
 
 Requirements:
 1. Follow Anchor 0.30.x idioms and best practices
@@ -30,31 +31,25 @@ Ensure the code compiles and follows Rust conventions:
 - Event emission for important state changes
 - Security checks (owner checks, signer verification)
 
-Output format - return a JSON object mapping relative file paths to complete file contents.
-All paths should be relative to the project root (e.g., "src/lib.rs", "src/instructions/mint.rs").
-Example output:
-```json
-{
-    "files": {
-        "src/lib.rs": "...",
-        "src/instructions/mod.rs": "...",
-        "src/instructions/mint.rs": "..."
-    }
-}
-```
+Split code into proper files:
+- programs/{project}/src/lib.rs - Main module with #[program] and declare_id!
+- programs/{project}/src/instructions/*.rs - Each instruction handler
+- programs/{project}/src/accounts.rs - Account structs
+- programs/{project}/src/errors.rs - Custom error types
+- programs/{project}/src/events.rs - Event definitions
 """
 
 
-class CodeGenerator(BaseAgent):
+class CodeGenerator(LLMOnlyAgent):
     """Agent that generates Rust instruction implementations using LangChain."""
 
     @property
     def agent_name(self):
         return "code_generator"
 
-    def _get_tools(self):
-        """No file tools - agent returns files in state."""
-        return []
+    def _create_executor(self):
+        """Create structured LLM for JSON output."""
+        return self.llm.with_structured_output(ProjectFiles)
 
     def _get_system_prompt(self):
         return SYSTEM_PROMPT
@@ -74,15 +69,14 @@ Features: {token_spec.get("features", [])}
 Existing files:
 {files_summary}
 
-Write complete Rust code for all instruction handlers. Return a JSON object with files mapping."""
+Write complete Rust code for all instruction handlers. Split into proper files."""
 
-    def _format_agent_result(self, state: dict, result: dict) -> dict:
-        """Extract the generated code from agent output."""
-        output = self._extract_output_from_result(result)
-        files = self._extract_files_from_output(output)
-
-        if files:
-            updated_files = {**state.get("files", {}), **files}
+    def _format_agent_result(self, state: dict, result: ProjectFiles) -> dict:
+        """Format the structured response."""
+        if result and result.files:
+            # Convert list of ProjectFile to dict[str, str]
+            files_dict = {f.path: f.content for f in result.files}
+            updated_files = {**state.get("files", {}), **files_dict}
             return {
                 **state,
                 "files": updated_files,
@@ -91,6 +85,6 @@ Write complete Rust code for all instruction handlers. Return a JSON object with
 
         return {
             **state,
-            "error_message": f"Failed to extract generated code: {output}",
+            "error_message": "Failed to generate code",
             "current_step": "code_generator",
         }

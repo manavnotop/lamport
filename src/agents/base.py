@@ -175,6 +175,8 @@ class LLMOnlyAgent(BaseAgent):
 
     Use this for agents like SpecInterpreter that only need to
     generate structured output without file operations.
+
+    Override _create_executor() to use with_structured_output() for JSON responses.
     """
 
     def _get_tools(self):
@@ -184,6 +186,12 @@ class LLMOnlyAgent(BaseAgent):
     def _create_executor(self):
         """Create a simple chain instead of agent executor."""
         return self.llm
+
+    def _is_structured_output(self) -> bool:
+        """Check if executor returns structured output (Pydantic model)."""
+        # Check if executor has 'with_structured_output' attribute (it's a bound method)
+        # or if the response would be a Pydantic model
+        return hasattr(self.executor, "with_structured_output")
 
     async def run(self, state: dict) -> dict:
         """Run the LLM-only agent."""
@@ -202,9 +210,15 @@ class LLMOnlyAgent(BaseAgent):
                 ]
             )
 
-            output_data = {
-                "content": response.content if hasattr(response, "content") else str(response),
-            }
+            # Check if this is structured output (Pydantic model)
+            if hasattr(response, "model_dump"):
+                # Structured output - response is a Pydantic model
+                output_data = {"content": response.model_dump()}
+            else:
+                # Regular output - response is an AIMessage
+                output_data = {
+                    "content": response.content if hasattr(response, "content") else str(response),
+                }
 
             log_llm_call(
                 agent_name=self.agent_name,
@@ -232,11 +246,22 @@ class LLMOnlyAgent(BaseAgent):
             }
 
     def _format_agent_result(self, state: dict, response) -> dict:
-        """Format LLM response into workflow state."""
+        """Format LLM response into workflow state.
+
+        Override in subclasses. For structured output, response is a Pydantic model.
+        For regular output, response is an AIMessage.
+        """
+        # Default behavior for regular output (override for structured output)
         content = response.content if hasattr(response, "content") else str(response)
         return self._extract_state_from_response(state, content)
 
-    @abstractmethod
     def _extract_state_from_response(self, state: dict, response: str) -> dict:
-        """Extract structured data from LLM response and update state."""
-        pass
+        """Extract structured data from LLM response and update state.
+
+        Override in subclasses for structured output handling.
+        """
+        return {
+            **state,
+            "agent_output": response,
+            "current_step": self._get_next_step(state),
+        }

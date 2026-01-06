@@ -1,4 +1,4 @@
-"""CLI entry point for Solana smart contract generator."""
+"""CLI entry point for Lamport - AI-powered Solana smart contract generator."""
 
 import asyncio
 import shutil
@@ -6,51 +6,106 @@ from collections.abc import Callable
 from pathlib import Path
 
 import typer
+from rich.box import DOUBLE, ROUNDED
 from rich.console import Console
 from rich.panel import Panel
+from rich.style import Style
 from rich.table import Table
+from rich.text import Text
 
 from src.config import require_api_key
 from src.graph.workflow import run_workflow
 from src.schemas.models import GraphState
-from src.utils.logging import setup_logging
+from src.utils.logging import load_config, setup_logging
 
 app = typer.Typer(
-    name="solana-contractor",
+    name="lamport",
     help="AI-powered Solana smart contract generator using Anchor/Rust",
     add_completion=False,
 )
 
 console = Console()
 
+# ASCII Art Branding
+ASCII_ART = """[bold cyan]
+██╗      █████╗ ███╗   ███╗██████╗  ██████╗ ██████╗ ████████╗
+██║     ██╔══██╗████╗ ████║██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝
+██║     ███████║██╔████╔██║██████╔╝██║   ██║██████╔╝   ██║
+██║     ██╔══██║██║╚██╔╝██║██╔═══╝ ██║   ██║██╔══██╗   ██║
+███████╗██║  ██║██║ ╚═╝ ██║██║     ╚██████╔╝██║  ██║   ██║
+╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝[/bold cyan]"""
+
+
+def should_show_ascii_art() -> bool:
+    """Check if ASCII art should be shown based on config."""
+    config = load_config()
+    output_config = config.get("output", {})
+    return output_config.get("ascii_art", True)
+
+
+def _print_welcome() -> None:
+    """Print welcome screen with ASCII art."""
+    if should_show_ascii_art():
+        console.print(ASCII_ART)
+        console.print()
+
+    welcome_text = Text.from_markup(
+        "AI-Powered Solana Smart Contract Generator\n\n"
+        "Enter a description of the contract you want to generate.\n"
+        "Type [bold orange3]quit[/bold orange3] or [bold orange3]exit[/bold orange3] to leave.",
+        style="white",
+    )
+
+    console.print(
+        Panel.fit(welcome_text, title="Welcome", box=ROUNDED, style=Style(color="orange3"))
+    )
+
+
+def _print_start_header(spec: str, project_name: str | None, test_mode: bool) -> None:
+    """Print the start header with generation info."""
+    test_mode_text = (
+        "[bold magenta]Yes[/bold magenta]" if test_mode else "[bold green]No[/bold green]"
+    )
+
+    header_text = Text.from_markup(
+        "Solana Smart Contract Generator\n"
+        f"[dim]Generating:[/dim] [bold cyan]{spec}[/bold cyan]\n"
+        f"[dim]Project:[/dim] [bold cyan]{project_name or 'Unnamed'}[/bold cyan]\n"
+        f"[dim]Test mode:[/dim] {test_mode_text}",
+        style="white",
+    )
+
+    console.print(Panel.fit(header_text, title="Start", box=ROUNDED, style=Style(color="orange3")))
+
 
 def _on_event(event: str) -> None:
-    """Handle workflow events and display progress."""
-    # Mapping for simple string events
+    """Handle workflow events and display progress with beautiful formatting."""
+    # Mapping for simple string events with rich formatting
     event_map = {
-        "workflow:start": "[dim]Starting workflow...[/dim]",
-        "workflow:success": "[green]✓ Build successful![/green]",
-        "workflow:failed": "[yellow]⚠ Build failed - check logs for details[/yellow]",
-        "agent:Spec Interpreter:start": "  [cyan]→[/cyan] [bold]Spec Interpreter[/bold]",
-        "agent:Spec Interpreter:end": "  [green]✓[/green] [bold]Spec Interpreter[/bold]",
-        "agent:Project Planner:start": "  [cyan]→[/cyan] [bold]Project Planner[/bold]",
-        "agent:Project Planner:end": "  [green]✓[/green] [bold]Project Planner[/bold]",
-        "agent:Code Generator:start": "  [cyan]→[/cyan] [bold]Code Generator[/bold]",
-        "agent:Code Generator:end": "  [green]✓[/green] [bold]Code Generator[/bold]",
-        "agent:Static Validator:start": "  [cyan]→[/cyan] [bold]Static Validator[/bold]",
-        "agent:Static Validator:end": "  [green]✓[/green] [bold]Static Validator[/bold]",
-        "agent:Debugger:start": "  [cyan]→[/cyan] [bold]Debugger[/bold]",
-        "agent:Debugger:end": "  [green]✓[/green] [bold]Debugger[/bold]",
-        "build:start": "  [cyan]→[/cyan] [bold]Building contract...[/bold]",
-        "build:success": "  [green]✓[/green] [bold]Build successful![/bold]",
-        "build:failed": "  [yellow]✗[/yellow] [bold]Build failed[/bold]",
-        "validation:start": "  [cyan]→[/cyan] [bold]Running validation...[/bold]",
-        "validation:success": "  [green]✓[/green] [bold]Validation passed[/bold]",
-        "validation:failed": "  [yellow]✗[/yellow] [bold]Validation failed[/bold]",
+        "workflow:start": ("Starting workflow...", "dim"),
+        "workflow:success": ("Build successful!", "green bold"),
+        "workflow:failed": ("Build failed - check logs for details", "yellow bold"),
+        "agent:Spec Interpreter:start": ("Spec Interpreter", "cyan bold"),
+        "agent:Spec Interpreter:end": ("Spec Interpreter", "green bold"),
+        "agent:Project Planner:start": ("Project Planner", "cyan bold"),
+        "agent:Project Planner:end": ("Project Planner", "green bold"),
+        "agent:Code Generator:start": ("Code Generator", "cyan bold"),
+        "agent:Code Generator:end": ("Code Generator", "green bold"),
+        "agent:Static Validator:start": ("Static Validator", "cyan bold"),
+        "agent:Static Validator:end": ("Static Validator", "green bold"),
+        "agent:Debugger:start": ("Debugger", "cyan bold"),
+        "agent:Debugger:end": ("Debugger", "green bold"),
+        "build:start": ("Building contract...", "cyan bold"),
+        "build:success": ("Build successful!", "green bold"),
+        "build:failed": ("Build failed", "red bold"),
+        "validation:start": ("Running validation...", "cyan bold"),
+        "validation:success": ("Validation passed", "green bold"),
+        "validation:failed": ("Validation failed", "red bold"),
     }
 
     if event in event_map:
-        console.print(event_map[event])
+        msg, style = event_map[event]
+        console.print(f"[{style}]{msg}[/{style}]")
         return
 
     # Handle parameterized events
@@ -61,13 +116,13 @@ def _on_event(event: str) -> None:
 
     elif event.startswith("file:write:"):
         path = event.split(":", 2)[2]
-        console.print(f"    [dim]Creating: {path}[/dim]")
+        console.print(f"    [dim]→[/dim] [cyan]Creating[/cyan] [white]{path}[/white]")
 
     elif event.startswith("file:created:"):
         parts = event.split(":", 3)
         path = parts[2]
         size = parts[3] if len(parts) > 3 else ""
-        console.print(f"    [green]✓[/green] Created: {path} [dim]{size}[/dim]")
+        console.print(f"    [green]✓[/green] Created: [cyan]{path}[/cyan] [dim]{size}[/dim]")
 
 
 def _generate_contract(
@@ -75,6 +130,7 @@ def _generate_contract(
     output: Path,
     verbose: bool = False,
     test_mode: bool = False,
+    project_name: str | None = None,
     on_event: Callable[[str], None] | None = None,
 ) -> GraphState:
     """Generate a Solana smart contract from specification.
@@ -84,6 +140,7 @@ def _generate_contract(
         output: Output directory for generated project
         verbose: Show verbose output
         test_mode: Use mock LLM for testing (no API calls)
+        project_name: Project name for anchor init
         on_event: Optional callback for progress events
 
     Returns:
@@ -105,17 +162,12 @@ def _generate_contract(
         console.print("[red]Error: cargo not found. Please install Rust toolchain.[/red]")
         raise typer.Exit(1)
 
-    console.print(
-        Panel.fit(
-            "[bold blue]Solana Smart Contract Generator[/bold blue]\n"
-            f"[dim]Generating: {spec}[/dim]\n"
-            f"[dim]Test mode: {'Yes' if test_mode else 'No'}[/dim]",
-            title="Start",
-        )
-    )
+    _print_start_header(spec, project_name, test_mode)
 
     async def run():
-        return await run_workflow(spec, on_event=on_event, test_mode=test_mode)
+        return await run_workflow(
+            spec, on_event=on_event, test_mode=test_mode, project_name=project_name
+        )
 
     state = asyncio.run(run())
 
@@ -134,6 +186,12 @@ def generate(
         "--output",
         help="Output directory for generated project",
     ),
+    name: str = typer.Option(
+        None,
+        "-n",
+        "--name",
+        help="Project name for anchor init",
+    ),
     verbose: bool = typer.Option(
         False,
         "-v",
@@ -150,28 +208,37 @@ def generate(
     """Generate a Solana smart contract from natural language specification.
 
     Example:
-        solana-contractor "create a mintable token called MyToken with symbol MYT"
+        lamport "create a mintable token called MyToken with symbol MYT" --name my_token
 
     Test mode:
-        solana-contractor "create a token" --test
+        lamport "create a token" --test --name my_token
     """
-    state = _generate_contract(spec, output, verbose, test_mode, on_event=_on_event)
+    state = _generate_contract(
+        spec, output, verbose, test_mode, project_name=name, on_event=_on_event
+    )
     _display_results(state, output, verbose)
 
 
 def run_interactive():
     """Start interactive REPL mode for generating contracts."""
-    console.print(
-        Panel.fit(
-            "[bold blue]Solana Smart Contract Generator[/bold blue]\n\n"
-            "Enter a description of the contract you want to generate.\n"
-            "Type [cyan]quit[/cyan] or [cyan]exit[/cyan] to leave.",
-            title="Welcome",
-        )
-    )
+    _print_welcome()
 
     while True:
-        prompt = console.input("\n[bold cyan]What should I build?[/bold cyan] ")
+        # Ask for project name first
+        project_name = console.input(
+            "\n[bold cyan]Project name (for anchor init):[/bold cyan] "
+        ).strip()
+
+        if project_name.lower() in ("quit", "exit", "q"):
+            console.print("[yellow]Goodbye![/yellow]")
+            break
+
+        if not project_name:
+            console.print("[yellow]Please enter a project name.[/yellow]")
+            continue
+
+        # Ask for the contract specification
+        prompt = console.input(f"[bold cyan]What should I build for '{project_name}'?[/bold cyan] ")
 
         if prompt.lower() in ("quit", "exit", "q"):
             console.print("[yellow]Goodbye![/yellow]")
@@ -182,7 +249,12 @@ def run_interactive():
 
         try:
             state = _generate_contract(
-                prompt, Path("."), verbose=False, test_mode=False, on_event=_on_event
+                prompt,
+                Path("."),
+                verbose=False,
+                test_mode=False,
+                project_name=project_name,
+                on_event=_on_event,
             )
 
             # Use project_root from state (set by workflow in contracts/<name>/)
@@ -197,7 +269,7 @@ def run_interactive():
 
 
 def _display_results(state: GraphState, output: Path, verbose: bool) -> None:
-    """Display workflow results.
+    """Display workflow results with beautiful formatting.
 
     Args:
         state: Final workflow state
@@ -205,31 +277,51 @@ def _display_results(state: GraphState, output: Path, verbose: bool) -> None:
         verbose: Show verbose output
     """
     if state.build_success:
+        # Success panel with green styling
         console.print(
             Panel.fit(
-                f"[bold green]Success![/bold green]\n\n"
-                f"Project: [cyan]{state.project_name}[/cyan]\n"
-                f"Artifact: [cyan]{state.final_artifact or 'N/A'}[/cyan]\n"
-                f"Output: [cyan]{output}[/cyan]",
-                title="Build Successful",
+                Text.assemble(
+                    ("✓ ", "green bold"),
+                    ("Build Successful!\n\n", "bold green"),
+                    ("Project: ", "dim"),
+                    (state.project_name or "N/A", "cyan bold"),
+                    ("\nOutput: ", "dim"),
+                    (str(output), "cyan"),
+                ),
+                title="[bold green]Success[/bold green]",
+                box=ROUNDED,
+                style=Style(color="green"),
             )
         )
     else:
+        # Failure panel with yellow styling
         console.print(
             Panel.fit(
-                f"[bold yellow]Build Failed[/bold yellow]\n\n"
-                f"Output directory: [cyan]{output}[/cyan]\n"
-                f"Files generated: {len(state.files)}",
-                title="Partial Result",
+                Text.assemble(
+                    ("⚠ ", "yellow bold"),
+                    ("Build Failed\n\n", "bold yellow"),
+                    ("Output directory: ", "dim"),
+                    (str(output), "cyan"),
+                    ("\nFiles generated: ", "dim"),
+                    (str(len(state.files)), "yellow"),
+                ),
+                title="[bold yellow]Partial Result[/bold yellow]",
+                box=ROUNDED,
+                style=Style(color="yellow"),
             )
         )
 
         if state.error_message:
             console.print(f"\n[red]Error: {state.error_message}[/red]")
 
-    # Show file structure
+    # Show file structure with styled table
     if state.files:
-        table = Table(title="Generated Files")
+        table = Table(
+            title="[bold]Generated Files[/bold]",
+            box=DOUBLE,
+            show_header=True,
+            header_style="bold cyan",
+        )
         table.add_column("Path", style="cyan")
         table.add_column("Size", justify="right", style="green")
 
@@ -241,19 +333,25 @@ def _display_results(state: GraphState, output: Path, verbose: bool) -> None:
 
     # Show errors if verbose or failed
     if verbose and state.validation_errors:
-        console.print("\n[yellow]Validation Errors:[/yellow]")
+        console.print("\n[bold yellow]Validation Errors:[/bold yellow]")
         for error in state.validation_errors[:10]:
             console.print(f"  - {error}")
 
     if verbose and state.build_logs:
-        console.print("\n[yellow]Build Logs:[/yellow]")
+        console.print("\n[bold yellow]Build Logs:[/bold yellow]")
         console.print(state.build_logs)
 
 
 @app.command()
 def check() -> None:
     """Check system prerequisites."""
-    console.print(Panel.fit("[bold]Prerequisites Check[/bold]"))
+    console.print(
+        Panel.fit(
+            "[bold]Prerequisites Check[/bold]",
+            title="System Check",
+            box=ROUNDED,
+        )
+    )
 
     checks = [
         ("cargo", shutil.which("cargo")),
@@ -262,8 +360,8 @@ def check() -> None:
         ("OPENROUTER_API_KEY", "OPENROUTER_API_KEY" in __import__("os").environ),
     ]
 
-    table = Table()
-    table.add_column("Tool", style="cyan")
+    table = Table(box=ROUNDED)
+    table.add_column("Tool", style="bold cyan")
     table.add_column("Status", style="green")
 
     all_ok = True
@@ -276,10 +374,11 @@ def check() -> None:
     console.print(table)
 
     if all_ok:
-        console.print("\n[green]All prerequisites met![/green]")
+        console.print("\n[bold green]All prerequisites met![/bold green]")
     else:
         console.print(
-            "\n[yellow]Some tools are missing. Install them for full functionality.[/yellow]"
+            "\n[bold yellow]Some tools are missing. "
+            "Install them for full functionality.[/bold yellow]"
         )
 
 

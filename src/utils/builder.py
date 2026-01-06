@@ -139,3 +139,15 @@ class Builder:
                 missing.append(tool)
 
         return len(missing) == 0, missing
+
+    def anchor_init(self, project_name: str) -> tuple[bool, str]:
+        """Run anchor init to create fresh Anchor project structure.
+
+        Args:
+            project_name: Name for the new project
+
+        Returns:
+            Tuple of (success, output)
+        """
+        success, stdout, stderr = self.run_command(["anchor", "init", project_name, "--no-git"])
+        return success, stdout + stderr

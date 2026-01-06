@@ -2,11 +2,18 @@
 # Edit these values to change which models each agent uses
 
 models:
-  spec_interpreter: "openai/gpt-oss-safeguard-20b"
-  project_planner: "openai/gpt-oss-safeguard-20b"
-  code_generator: "openai/gpt-oss-safeguard-20b"
-  debugger: "openai/gpt-oss-safeguard-20b"
+  spec_interpreter: "openai/gpt-oss-120b"
+  project_planner: "openai/gpt-oss-120b"
+  code_generator: "openai/gpt-oss-120b"
+  debugger: "openai/gpt-oss-120b"
 
 # Build configuration
 build:
   anchor_sbf_root: null
+
+# Output/UI Configuration
+output:
+  colors: true           # Enable/disable colors in output
+  ascii_art: true        # Show ASCII art branding at startup
+  theme: "dark"          # dark, light, auto (auto detects terminal)
+  logging: false         # Enable/disable logging output
