@@ -4,6 +4,7 @@ from src.agents.base import LLMOnlyAgent
 from src.schemas.models import ProjectFiles
 
 SYSTEM_PROMPT = """You are an expert Solana smart contract Rust developer specializing in
+
 Anchor 0.30.x. The Anchor project is already initialized. Your task is to write
 complete, production-ready Rust code for ANY Solana program based on the specification.
 
@@ -41,6 +42,14 @@ File structure:
 
 CRITICAL: Do NOT declare "pub mod accounts;" in lib.rs - the #[program] macro generates its own accounts namespace and this will cause E0428 conflicts!
 
+CRITICAL: The #[program] module name MUST match the crate name (folder name under programs/).
+For example, if the project is in programs/counter/, use: #[program] pub mod counter
+
+CRITICAL CONSTRAINT - DO NOT MODIFY:
+- NEVER modify "declare_id!" in lib.rs - the program ID is already set by project_planner
+- NEVER modify [programs] section in Anchor.toml - program ID is already configured
+- Only write instruction handlers, account structs, and error types
+
 Examples:
 - Counter: lib.rs should NOT have "pub mod accounts;" - instead use: use crate::accounts::Counter;
 - accounts.rs has Counter { count: u64, authority: Pubkey }, increment instruction bumps count
@@ -69,12 +78,13 @@ class CodeGenerator(LLMOnlyAgent):
         """Format the token spec and existing files for the agent."""
         spec = state.get("interpreted_spec", {})
         existing_files = state.get("files", {})
+        project_name = state.get("project_name", "unknown")
 
         files_summary = "\n".join(f"- {path}" for path in existing_files)
 
         return f"""Generate Rust instruction implementations for:
 
-Contract: {spec.get("name", "Unknown")}
+Project folder name (crate name): {project_name}
 Description: {spec.get("description", "N/A")}
 Features: {spec.get("features", [])}
 
@@ -84,6 +94,8 @@ Data structures: {spec.get("data_structs", [])}
 
 Existing files:
 {files_summary}
+
+CRITICAL: Use "{project_name}" as the #[program] module name - it MUST match the crate/folder name.
 
 Write complete Rust code for all instruction handlers. Split into proper files.
 Use anchor_spl only if mintable, burnable, or transferable features are present."""

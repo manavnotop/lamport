@@ -14,20 +14,27 @@ Output a JSON object with a "files" array. Each file has:
 - content: complete file contents
 
 Project structure:
-- programs/{project_name}/src/lib.rs - Main program file (MODIFY THIS)
-- programs/{project_name}/src/instructions/*.rs - Additional instruction files (OPTIONAL)
-- programs/{project_name}/src/accounts.rs - Account structs (OPTIONAL)
-- programs/{project_name}/src/errors.rs - Custom errors (OPTIONAL)
+- programs/{project_name}/src/instructions/*.rs - Instruction handlers (CREATE/MODIFY)
+- programs/{project_name}/src/accounts.rs - Account structs (CREATE/MODIFY)
+- programs/{project_name}/src/errors.rs - Custom errors (CREATE/MODIFY)
 - tests/{project_name}.ts - Integration tests (CREATE THIS)
 
 Requirements:
-1. Replace the default lib.rs with complete contract code
-2. Include declare_id!() with the program ID
-3. Implement all instruction handlers in #[program] module
-4. Create #[derive(Accounts)] structs for each instruction
-5. Write integration tests in TypeScript using @coral-xyz/anchor
+1. DO NOT touch lib.rs or declare_id! - already set up by anchor init
+2. Implement instruction handlers in programs/{project}/src/instructions/*.rs
+3. Create #[derive(Accounts)] structs for each instruction
+4. Write integration tests in TypeScript using @coral-xyz/anchor
 
 Split code into proper files for maintainability.
+
+IMPORTANT: The Anchor project is already initialized with anchor init.
+- DO NOT write lib.rs with declare_id! - it's already set up by anchor init
+- DO NOT modify [programs] section in Anchor.toml - already configured
+- Only write: programs/{project}/src/instructions/*.rs, accounts.rs, errors.rs, and tests/*.ts
+- Import the existing lib.rs in instruction files if needed
+
+If lib.rs needs instruction module imports, write them in a separate file pattern:
+- programs/{project}/src/instructions/mod.rs - instruction handler modules
 """
 
 
