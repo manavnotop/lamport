@@ -4,8 +4,9 @@
 models:
   spec_interpreter: "openai/gpt-oss-120b"
   project_planner: "openai/gpt-oss-120b"
-  code_generator: "moonshotai/kimi-k2-thinking"
-  debugger: "moonshotai/kimi-k2-thinking"
+  file_planner: "x-ai/grok-code-fast-1"
+  code_generator: "x-ai/grok-code-fast-1"
+  debugger: "x-ai/grok-code-fast-1"
 
 # Build configuration
 build:

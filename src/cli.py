@@ -89,6 +89,8 @@ def _on_event(event: str) -> None:
         "agent:Spec Interpreter:end": ("Spec Interpreter", "green bold"),
         "agent:Project Planner:start": ("Project Planner", "cyan bold"),
         "agent:Project Planner:end": ("Project Planner", "green bold"),
+        "agent:File Planner:start": ("File Planner", "cyan bold"),
+        "agent:File Planner:end": ("File Planner", "green bold"),
         "agent:Code Generator:start": ("Code Generator", "cyan bold"),
         "agent:Code Generator:end": ("Code Generator", "green bold"),
         "agent:Static Validator:start": ("Static Validator", "cyan bold"),
@@ -118,11 +120,35 @@ def _on_event(event: str) -> None:
         path = event.split(":", 2)[2]
         console.print(f"    [dim]→[/dim] [cyan]Creating[/cyan] [white]{path}[/white]")
 
+    elif event.startswith("batch:planned:"):
+        parts = event.split(":", 3)
+        batch_id = parts[2]
+        description = parts[3] if len(parts) > 3 else ""
+        console.print(
+            f"  [dim]→[/dim] [cyan]Planned batch:[/cyan] [white]{batch_id}[/white] [dim]({description})[/dim]"
+        )
+
+    elif event.startswith("batch:start:"):
+        batch_id = event.split(":", 2)[2]
+        console.print(f"  [cyan]Generating batch:[/cyan] [white]{batch_id}[/white]")
+
+    elif event.startswith("batch:end:"):
+        batch_id = event.split(":", 2)[2]
+        console.print(f"  [green]✓[/green] Batch complete: [cyan]{batch_id}[/cyan]")
+
+    elif event.startswith("file:generating:"):
+        path = event.split(":", 2)[2]
+        console.print(f"    [dim]→[/dim] [yellow]Generating[/yellow] [white]{path}[/white]")
+
     elif event.startswith("file:created:"):
         parts = event.split(":", 3)
         path = parts[2]
         size = parts[3] if len(parts) > 3 else ""
         console.print(f"    [green]✓[/green] Created: [cyan]{path}[/cyan] [dim]{size}[/dim]")
+
+    elif event.startswith("file:failed:"):
+        path = event.split(":", 2)[2]
+        console.print(f"    [red]✗[/red] Failed: [cyan]{path}[/cyan]")
 
 
 def _generate_contract(

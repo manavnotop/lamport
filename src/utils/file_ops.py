@@ -26,16 +26,25 @@ class FileOps:
             files: Dictionary mapping relative paths to file contents
         """
         for rel_path, content in files.items():
-            file_path = self._resolve(rel_path)
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            # Atomic write with temp file
-            tmp = file_path.with_suffix(file_path.suffix + ".tmp")
-            tmp.write_text(content, encoding="utf-8", newline="\n")
-            try:
-                tmp.replace(file_path)
-            except OSError:
-                # Windows fallback: file might be open
-                shutil.move(str(tmp), str(file_path))
+            self.write_file(rel_path, content)
+
+    def write_file(self, rel_path: str, content: str) -> None:
+        """Write a single file atomically.
+
+        Args:
+            rel_path: Relative path from base directory
+            content: File contents to write
+        """
+        file_path = self._resolve(rel_path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        # Atomic write with temp file
+        tmp = file_path.with_suffix(file_path.suffix + ".tmp")
+        tmp.write_text(content, encoding="utf-8", newline="\n")
+        try:
+            tmp.replace(file_path)
+        except OSError:
+            # Windows fallback: file might be open
+            shutil.move(str(tmp), str(file_path))
 
     def read_file(self, rel_path: str) -> str:
         """Read a file from the project directory.

@@ -35,20 +35,21 @@ For custom data structures (accounts):
 - Include space calculation
 
 File structure:
-- programs/{project}/src/lib.rs - Main module with #[program], declare_id!, instruction modules (DO NOT add "pub mod accounts;" here!)
+- programs/{project}/src/lib.rs - Main module with #[program], ALREADY HAS correct declare_id! from anchor init
 - programs/{project}/src/instructions/*.rs - Each instruction handler in separate files
 - programs/{project}/src/accounts.rs - Account struct definitions (import with: use crate::accounts::StructName;)
 - programs/{project}/src/errors.rs - Custom error types
 
-CRITICAL: Do NOT declare "pub mod accounts;" in lib.rs - the #[program] macro generates its own accounts namespace and this will cause E0428 conflicts!
+CRITICAL CONSTRAINT - lib.rs ALREADY EXISTS with correct declare_id! from anchor init:
+- DO NOT REWRITE declare_id! at all - the file already has the correct program ID from anchor init
+- DO NOT WRITE "pub mod accounts;" - use: use crate::accounts::StructName;
+- DO NOT WRITE "pub mod errors;" or "pub mod instructions;" - use: use crate::errors::ErrorName;
+- Only add instruction handlers INSIDE the #[program] module (e.g., pub mod counter { use crate::accounts::*; ... })
+- NEVER modify [programs] section in Anchor.toml - program ID is already configured
+- Only write instruction handlers, account structs, and error types
 
 CRITICAL: The #[program] module name MUST match the crate name (folder name under programs/).
 For example, if the project is in programs/counter/, use: #[program] pub mod counter
-
-CRITICAL CONSTRAINT - DO NOT MODIFY:
-- NEVER modify "declare_id!" in lib.rs - the program ID is already set by project_planner
-- NEVER modify [programs] section in Anchor.toml - program ID is already configured
-- Only write instruction handlers, account structs, and error types
 
 Examples:
 - Counter: lib.rs should NOT have "pub mod accounts;" - instead use: use crate::accounts::Counter;
@@ -79,8 +80,26 @@ class CodeGenerator(LLMOnlyAgent):
         spec = state.get("interpreted_spec", {})
         existing_files = state.get("files", {})
         project_name = state.get("project_name", "unknown")
+        current_batch = state.get("current_batch", {})
 
         files_summary = "\n".join(f"- {path}" for path in existing_files)
+
+        # If in batch mode, only generate files for current batch
+        batch_files = current_batch.get("file_paths", []) if current_batch else []
+        batch_description = current_batch.get("description", "") if current_batch else ""
+
+        batch_instructions = ""
+        if batch_files:
+            # Filter to only relevant instructions based on batch files
+            batch_file_names = [f.split("/")[-1].replace(".rs", "") for f in batch_files]
+            instructions = spec.get("instructions", [])
+            batch_instructions = f"""
+
+CURRENT BATCH: {batch_description}
+Files to generate in this batch:
+{chr(10).join(f"- {f}" for f in batch_files)}
+
+Only generate code for the files listed above. Do NOT generate other files - they will be generated in subsequent batches."""
 
         return f"""Generate Rust instruction implementations for:
 
@@ -94,10 +113,11 @@ Data structures: {spec.get("data_structs", [])}
 
 Existing files:
 {files_summary}
+{batch_instructions}
 
 CRITICAL: Use "{project_name}" as the #[program] module name - it MUST match the crate/folder name.
 
-Write complete Rust code for all instruction handlers. Split into proper files.
+Write complete Rust code for the files requested. Split into proper files.
 Use anchor_spl only if mintable, burnable, or transferable features are present."""
 
     def _format_agent_result(self, state: dict, result: ProjectFiles) -> dict:

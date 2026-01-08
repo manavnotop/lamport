@@ -6,7 +6,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 # Constants
-MAX_RETRIES = 2
+MAX_RETRIES = 0
 
 
 class ContractFeature(str, Enum):
@@ -81,6 +81,13 @@ class GraphState(BaseModel):
     error_message: str | None = Field(default=None)
     test_mode: bool = Field(default=False)
 
+    # Fields for incremental file generation
+    # Store generation_plan as dict for serialization compatibility with LangGraph
+    generation_plan: dict | None = Field(default=None)
+    pending_files: dict[str, str] = Field(default_factory=dict)
+    generated_files: dict[str, str] = Field(default_factory=dict)
+    file_progress: tuple[int, int] = Field(default=(0, 0))
+
     def to_dict(self) -> dict:
         return self.model_dump()
 
@@ -116,3 +123,34 @@ class ProjectFiles(BaseModel):
     """Structured output for file generation from LLM."""
 
     files: list[ProjectFile] = Field(..., description="List of generated project files")
+
+
+class FileBatch(BaseModel):
+    """A batch of files that can be generated in parallel."""
+
+    batch_id: str = Field(..., description="Unique identifier for this batch")
+    file_paths: list[str] = Field(..., description="List of file paths in this batch")
+    description: str = Field(..., description="What these files represent")
+    dependencies: list[str] = Field(
+        default_factory=list, description="Batch IDs this batch depends on"
+    )
+    priority: int = Field(default=0, description="Lower = generate first")
+
+
+class GenerationPlan(BaseModel):
+    """Plan for incremental file generation with parallel batches."""
+
+    batches: list[FileBatch] = Field(..., description="Ordered batches of files")
+    total_files: int = Field(..., description="Total files to generate")
+    generation_order: list[list[str]] = Field(
+        ..., description="Batches that can run in parallel at each step"
+    )
+
+
+class FileGenerationResult(BaseModel):
+    """Result from generating a batch of files."""
+
+    batch_id: str = Field(..., description="The batch that was processed")
+    files: dict[str, str] = Field(default_factory=dict, description="Generated file contents")
+    success: bool = Field(default=True, description="Whether generation succeeded")
+    error_message: str | None = Field(default=None, description="Error if success is False")

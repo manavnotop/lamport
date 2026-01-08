@@ -27,6 +27,7 @@ class Settings:
     # Model Configuration (cost-aware routing)
     model_spec_interpreter: str = field(default="google/gemini-2.5-pro")
     model_project_planner: str = field(default="google/gemini-2.5-pro")
+    model_file_planner: str = field(default="google/gemini-2.5-pro")
     model_code_generator: str = field(default="anthropic/claude-sonnet-4-20250514")
     model_debugger: str = field(default="anthropic/claude-opus-4-20250514")
 
@@ -54,6 +55,7 @@ def _merge_settings(yaml_config: dict) -> Settings:
         openrouter_api_key=getenv("OPENROUTER_API_KEY"),
         model_spec_interpreter=models.get("spec_interpreter", defaults.model_spec_interpreter),
         model_project_planner=models.get("project_planner", defaults.model_project_planner),
+        model_file_planner=models.get("file_planner", defaults.model_file_planner),
         model_code_generator=models.get("code_generator", defaults.model_code_generator),
         model_debugger=models.get("debugger", defaults.model_debugger),
         anchor_sbf_root=build.get("anchor_sbf_root", defaults.anchor_sbf_root),
