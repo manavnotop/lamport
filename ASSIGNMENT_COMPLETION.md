@@ -14,6 +14,9 @@ I was given the following two tasks to implement human-in-the-loop capabilities 
 - Enriches the user specification with the answers provided
 - Loops back to the spec_interpreter with the clarified requirements
 
+**Output Preview**:
+![Task 1 Output](assests/task1.png)
+
 ---
 
 ### Task 2: Feedback Mode - User Input After Debugger Exhausts Retries
@@ -28,6 +31,9 @@ I was given the following two tasks to implement human-in-the-loop capabilities 
 - Passes the user's feedback to the debugger agent for context
 
 The debugger was also updated to include user feedback in its prompt, allowing it to use the additional context on its next attempt.
+
+**Output Preview**:
+![Task 2 Output](assests/task2.png)
 
 ---
 

@@ -3,11 +3,51 @@
 import json
 import re
 
+from pydantic import BaseModel
+
 from src.agents.base import LLMOnlyAgent
 from src.schemas.models import TokenSpec
 
+
+class ClarificationNeeded(BaseModel):
+    """Response when spec needs clarification."""
+
+    needs_clarification: bool = True
+    questions: list[str]
+    reason: str
+
+
+class SpecResult(BaseModel):
+    """Union response from spec interpreter."""
+
+    needs_clarification: bool = False
+    token_spec: TokenSpec | None = None
+    questions: list[str] = []
+    reason: str | None = None
+
+
 SYSTEM_PROMPT = """You are a Solana smart contract specification interpreter.
-Your job is to convert ANY natural language specification into a structured TokenSpec.
+Your job is to convert ANY natural language specification into a structured TokenSpec,
+OR identify when you need to ask clarifying questions.
+
+FIRST, analyze if the specification is clear enough to generate a complete contract.
+A spec is unclear/vague when:
+- It mentions a program type but not what operations it needs (e.g., "create a token")
+- It's extremely brief with no details (e.g., "make a program")
+- It's missing key info that would affect the contract structure
+
+A spec is CLEAR when:
+- It mentions specific operations (e.g., "counter with increment and decrement")
+- It specifies features (e.g., "mintable token")
+- It describes the full functionality needed
+
+If CLEAR, output a TokenSpec JSON with the contract details.
+
+If UNCLEAR, output JSON with:
+{"needs_clarification": true, "questions": [...], "reason": "..."}
+
+IMPORTANT: Be conservative - if there's enough info to create a functional contract,
+proceed. Only ask for clarification when genuinely needed.
 
 You support ALL types of Solana programs:
 - Token contracts (mintable, burnable, transferable, etc.)
@@ -17,33 +57,24 @@ You support ALL types of Solana programs:
 - Vault programs (deposit, withdraw, split)
 - Custom programs with any instructions
 
-For the specification, determine:
+For TokenSpec, determine:
 1. What is the program NAME?
-2. What INSTRUCTIONS are needed (e.g., initialize, mint, transfer, increment, deposit)?
-3. What ACCOUNTS are required (e.g., counter, mint, token_account, user)?
-4. What DATA STRUCTURES are needed (custom account state)?
+2. What INSTRUCTIONS are needed (initialize, mint, transfer, etc.)?
+3. What ACCOUNTS are required (counter, mint, token_account, user)?
+4. What DATA STRUCTURES are needed?
 5. What FEATURES apply (mintable, burnable, counter, escrow, etc.)?
 
-Output format: JSON only, no markdown, matching this schema:
-{
-    "name": "Program Name",
-    "symbol": "SYM or null (only for tokens)",
-    "description": "Brief description of what this program does",
-    "decimals": 9 or null (only for tokens)",
-    "features": ["mintable", "counter", "escrow", ...],
-    "initial_supply": null or number (only for tokens)",
-    "instructions": ["initialize", "increment", "decrement", ...],
-    "accounts": ["counter", "authority", "user", ...],
-    "data_structs": [{"name": "Counter", "fields": [{"name": "count", "type": "u64"}, {"name": "authority", "type": "pubkey"}]}]
-}
+Output format: JSON only, no markdown, either:
+- TokenSpec: {"name": "...", "symbol": "...", "decimals": 9, "features": [...], ...}
+- OR Clarification: {"needs_clarification": true, "questions": [...], "reason": "..."}
 
-Examples:
-- "create a counter program" -> instructions: ["initialize", "increment"], accounts: ["counter", "authority"], data_structs: Counter with count field
-- "create a mintable token" -> instructions: ["initialize", "mint", "transfer"], features: ["mintable", "transferable"], accounts: ["mint", "token_account"]
-- "create an escrow contract" -> instructions: ["initialize", "deposit", "withdraw", "cancel"], features: ["escrow"], accounts: ["escrow", " initializer", "temp_token_account"]
+Examples CLEAR specs:
+- "create counter with increment/decrement" -> TokenSpec with instructions
+- "create mintable token called MyToken" -> TokenSpec with mintable feature
 
-Infer missing information from the specification. Default to simple, secure implementations.
-"""
+Examples UNCLEAR specs:
+- "create a token" -> questions: ["What operations needed?", "Mintable?"]
+- "make a program" -> questions: ["What type?", "What should it do?"]"""
 
 
 class SpecInterpreter(LLMOnlyAgent):
@@ -77,17 +108,31 @@ class SpecInterpreter(LLMOnlyAgent):
         return f"Interpret this specification:\n\n{user_spec}"
 
     def _extract_state_from_response(self, state: dict, response: str) -> dict:
-        """Parse the LLM response and extract TokenSpec."""
+        """Parse the LLM response and extract either TokenSpec or clarification questions."""
         try:
             # Clean up response if it has markdown formatting
             clean_response = response.strip()
             if clean_response.startswith("```json"):
                 clean_response = clean_response[7:]
+            if clean_response.startswith("```"):
+                clean_response = clean_response[3:]
             if clean_response.endswith("```"):
                 clean_response = clean_response[:-3]
             clean_response = clean_response.strip()
 
             data = json.loads(clean_response)
+
+            # Check if response indicates need for clarification
+            if data.get("needs_clarification", False):
+                questions = data.get("questions", [])
+                return {
+                    **state,
+                    "needs_clarification": True,
+                    "clarification_questions": questions,
+                    "current_step": "clarification",
+                }
+
+            # Otherwise, parse as TokenSpec
             token_spec = TokenSpec(**data)
 
             # Generate project_name from token name
@@ -97,6 +142,8 @@ class SpecInterpreter(LLMOnlyAgent):
 
             return {
                 **state,
+                "needs_clarification": False,
+                "clarification_questions": [],
                 "interpreted_spec": token_spec.model_dump(),
                 "project_name": name,
                 "current_step": "project_planner",
