@@ -106,6 +106,12 @@ class Debugger(BaseAgent):
         if not error_info:
             error_info = "Unknown error - no error information available"
 
+        user_feedback = state.get("user_feedback")
+        if user_feedback:
+            error_info = (
+                f"User provided additional context:\n{user_feedback}\n\n---\n\n{error_info}"
+            )
+
         files = state.get("files", {})
 
         # Include file contents so the agent can see the code

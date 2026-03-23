@@ -30,6 +30,25 @@ class ContractFeature(str, Enum):
     SWAP = "swap"
 
 
+class TokenType(str, Enum):
+    """Token type classification."""
+
+    FUNGIBLE = "fungible"
+    NON_FUNGIBLE = "non-fungible"
+    SEMI_FUNGIBLE = "semi-fungible"
+    CUSTOM = "custom"
+
+
+class ClarifiedSpec(BaseModel):
+    """Captures user answers during clarification phase."""
+
+    token_type: TokenType | None = None
+    operations: list[str] = Field(default_factory=list)
+    features: list[str] = Field(default_factory=list)
+    initial_supply: int | None = None
+    skip_clarification: bool = False
+
+
 class TokenSpec(BaseModel):
     """Specification for a Solana smart contract (token, counter, escrow, etc.)."""
 
@@ -90,6 +109,20 @@ class GraphState(BaseModel):
 
     # Generation mode for code_generator (FILE_MODE or INJECTION_MODE)
     generation_mode: str | None = Field(default=None, description="FILE_MODE or INJECTION_MODE")
+
+    # Human-in-the-loop clarification fields
+    needs_clarification: bool = Field(default=False, description="Whether spec needs clarification")
+    clarification_questions: list[str] = Field(
+        default_factory=list, description="Questions to ask user"
+    )
+    clarification_answers: dict[str, str] = Field(
+        default_factory=dict, description="User's answers to questions"
+    )
+
+    # Human-in-the-loop feedback fields (after debugger exhausts retries)
+    user_feedback: str | None = Field(
+        default=None, description="User's feedback after debugger fails"
+    )
 
     def to_dict(self) -> dict:
         return self.model_dump()
